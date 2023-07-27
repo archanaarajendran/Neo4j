@@ -1,0 +1,113 @@
+//Script to import global terrorist data
+LOAD CSV WITH HEADERS FROM "file:///terrorist_data_subset.csv" AS row
+MERGE (c:Country {Name:row.Country})
+MERGE (a:Actor {Name: row.ActorName, Aliases: row.Aliases, Type: row.ActorType})
+MERGE (o:Organization {Name: row.AffiliationTo})
+MERGE (a)-[:AFFILIATED_TO {Start: row.AffiliationStartDate, End: row.AffiliationEndDate}]->(o)
+MERGE(c)<-[:IS_FROM]-(a);
+
+//Note: when working with neo4j community edition , copy the file into a folder called import which is present in neo4j folder and then directly give the file name directly
+
+//Basic queries using CYPHER-the descriptive language in neo4j
+
+//count total nodes
+match(n) return count(n) 
+
+//count only the actor nodes
+ match(n:Actor) return count(n)
+
+//counting number of edges
+match(n)-->(r) return count(r) 
+
+//counting number of edges
+match p=()-->() return count(p) 
+
+// finding leaf nodes
+MATCH (n)-[r:AFFILIATED_TO]->(m) where not((m)-->()) RETURN m 
+
+// finding root node
+match (n)-[r]->(m) where not (()-->(n))return n
+
+//finding triangles
+match (a)-[]->(b)-[]->(c)-[]->(a)
+return distinct a, b, c
+
+//finding the second neighbours associated with the terrorist named 'Mohammed Zaman'
+//nodes that are 2 nodes away from n.Name
+match (n)-[:AFFILIATED_TO*..2]-(m)
+where n.Name='Mohammed Zaman' 
+return distinct n, m
+
+//To find the label associated with a node
+match(n) where n.Name='Afghanistan' return labels(n)
+
+//list all the distinct labels of nodes
+match(n) return distinct labels(n)
+
+//To find the nodes which is linked with the relation 'IS_FROM' // finding list of countries
+match(n)-[r:IS_FROM] ->(m) return m
+
+//To find the country which a particular actor belongs to
+match(n:Actor)-[r:IS_FROM]->(m)  where n.Name='Mohammed Zaman' return m
+
+//To find the list of affliations of an actor
+match(n:Actor)-[r:AFFILIATED_TO]->(m)  where n.Name='Mohammed Zaman' return m
+
+//To find the relationship associated with a node
+match (n {Name: 'Mohammed Zaman'})-[r]->()
+return distinct type(r)
+
+//To find label of an edge
+match (n {Name: 'Afghanistan'})<-[r]-() return distinct type(r)
+
+//To find the list of all distinct edge labels
+match ()-[r]->() return distinct type(r)
+
+//listing all the properties of a node
+match(n:Actor) return distinct keys(n)
+
+//Note: This will give the answer as list but different combination of the node properties are 
+//listed as separate answers. SO, the code below gives the desired answer
+
+MATCH (n:Actor)
+WITH DISTINCT(keys(n)) as key_sets
+UNWIND(key_sets) as keys
+RETURN DISTINCT(keys) as key
+
+//finding self loop
+match (n)-[r]->(n)
+return n, r limit 10
+
+//finding multigraphs // Mutligraphs are graphs with more than one edge between the same pair of nodes
+match (n)-[r1]->(m), (n)-[r2]-(m)
+where r1 <> r2
+return n, r1, r2, m limit 10
+
+//Finding induced Subgraphs from the given set of nodes
+match (n)-[r:IS_FROM]->(m)
+where n.Name in ['Mohammad Najibullah','Mohammad Nur Ahmad Etemadi','Mohammad Rabbani'] and m.Name in ['Afghanistan']
+return n, r, m
+
+//viewing the graph
+match (n)-[r]-(m) return n,r,m
+
+//Loading road network dataset
+
+LOAD CSV WITH HEADERS FROM "file:///test.csv" AS line
+MERGE (n:MyNode {Name:line.Source})
+MERGE (m:MyNode {Name:line.Target})
+MERGE (n) -[:TO {dist:line.distance}]-> (m)
+
+
+
+
+    
+
+
+
+
+
+
+
+
+

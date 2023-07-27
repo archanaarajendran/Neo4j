@@ -1,0 +1,150 @@
+// creating sample node road network in AURA DB
+create (A:Node {name: 'A'}) - [:distance {relationship: 'TO', distance:3}] -> (C:Node {name:
+    'C'}),
+    (C) - [:distance {relationship: 'TO', distance:2}] -> (J:Node {name: 'J' }),
+    (C) - [:distance {relationship: 'TO', distance:7}] -> (B:Node {name: 'B'}),
+    (J) - [:distance {relationship: 'TO', distance:7}] -> (F:Node {name: 'F' }),
+    (F) - [:distance {relationship: 'TO', distance:5}] -> (A),
+    (A) - [:distance {relationship: 'TO', distance:6}] -> (L:Node {name: 'L'}),
+    (L) - [:distance {relationship: 'TO', distance:8}] -> (E:Node {name: 'E' }),
+    (B) - [:distance {relationship: 'TO', distance:5}] -> (D:Node {name:'D'}),
+    (D) - [:distance {relationship: 'TO', distance:4}] -> (E),
+    (D) - [:distance {relationship: 'TO', distance:3}] -> (C),
+    (E) - [:distance {relationship: 'TO', distance:4}] -> (G:Node {name: 'G' }),
+    (G) - [:distance {relationship: 'TO', distance:1}] -> (D),
+    (G) - [:distance {relationship: 'TO', distance:4}] -> (P:Node {name: 'P'}),
+    (H:Node {name: 'H'}) - [:distance {relationship: 'TO', distance:5}] -> (J);
+
+// visualizing the graph
+
+match(n)-[r]->(p) return n,r,p
+
+//to retrieve properties from a set of relationships
+MATCH (n)-[r]->(m)
+where n.name='A'
+//way:1-return a list of maps with keys `id` and `properties`
+//RETURN {id:id(r),properties:properties(r)} AS output 
+// way2-return just the properties as a map
+//RETURN properties(r) AS propertiesMap
+// way3:return a collection of maps
+RETURN COLLECT(properties(r)) AS listOfPropertyMaps
+
+// finding path between specific nodes
+//Note: the path returned is not the shortest here.It just returns the first path 
+// ANd the value is the number of hops between source and destination node
+
+match p=(a)-[:distance*]-(c)
+where a.name='H' and c.name='P'
+return p,length(p) limit 1
+
+//finding path between specific nodes :tweaking the code to return the shorterst path
+match p=(a)-[:distance*]-(c) where a.name='H' and c.name='P' return p order by length(p) asc limit 1
+
+//finding the path length between 2 nodes
+Note: The path length not necessarily the shortest path
+match p=(a)-[:distance*]-(c)
+where a.name='H' and c.name='P'
+return length(p) limit 1
+
+// finding shortest path between specific nodes
+match p=shortestPath((a)-[:distance*]-(c))
+where a.name='H' and c.name='P'
+return p, length(p) limit 1
+
+//all pair shortest path between specific nodes
+
+MATCH p = allShortestPaths((source)-[r:distance*]-(destination))
+WHERE source.name='H' AND destination.name = 'P'
+    With p,collect(nodes(p)) as listoflistofnodes
+    Unwind listoflistofnodes as list
+    Unwind list as element
+    RETURN collect(distinct element.name), length(p) as paths
+    
+//al pair shortest path between specific nodes without using unwind
+
+MATCH p = allShortestPaths((source)-[r:distance*]->(destination))
+WHERE source.name='A' AND destination.name = 'P'
+RETURN collect(NODES(p)) AS Paths,length(p)
+
+// all shortest path between every pair of vertex
+MATCH p = allShortestPaths((source)-[r:distance*]-(destination))
+WHERE source.name <>destination.name
+    With source,destination,p,collect(nodes(p)) as listoflistofnodes
+    Unwind listoflistofnodes as list
+    Unwind list as element
+    RETURN source.name,destination.name,collect(distinct element.name), length(p) as paths
+
+//allshortest path with limit on path length
+MATCH p = allShortestPaths((source)-[r:distance*1..5]->(destination))
+WHERE source <> destination //and length(p)<=5(same as giving the limit in relationship)
+       With source,destination,p,collect(nodes(p)) as listoflistofnodes
+       Unwind listoflistofnodes as list
+       Unwind list as element
+       RETURN source AS source, 
+       destination AS destination, 
+       length(p) AS hops,
+       COLLECT(element.name) AS paths
+
+// single source shortest path using Dijkstras
+MATCH (from: Node {name:'A'}), (to: Node{name:'P'}),
+path = shortestPath((from)-[:distance*]->(to))
+WITH REDUCE(dist = 0, rel in relationships(path) | dist + toInteger(rel.distance)) AS distance, path, from, to
+RETURN from, to, path, distance order by distance asc 
+
+
+//Diameter of the graph -> longest hop between the nodes in the network
+match (n:Node), (m:Node)
+where n <> m
+with n, m
+match p=shortestPath((n)-[*]->(m))
+return n.name, m.name, length(p)
+order by length(p) desc limit 1
+
+// computing with nodes and properties
+match p=(a)-[:distance*]-(c)
+where a.name='A' and c.name='P'
+return COLLECT(nodes(p)) as Nodes, length(p) as pathLength,
+reduce(s=0, e in relationships(p)| s + toInteger(e.distance)) as pathDist limit 1
+
+//Graph not containing the specified node
+match (n)-[r:distance]->(m)
+where n.name <> 'D' and m.name <> 'D'
+return n, r, m
+
+//Shortest path over a Graph not containing a selected node:
+match p=shortestPath((a {name: 'A'})-[:distance*]-(b {name: 'P'}))
+WHERE all(r IN nodes(p) WHERE r.name <>'D')
+RETURN p,length(p)
+
+//find the neighbours of a node
+match (d {name:'D'})-[:distance]-(b)
+return collect(distinct b.name) as neighbors_of_D
+
+//visualizing the neigbhours of a node
+match(n)-[r]-(m) where n.name='D' return n,m,r
+
+//Graph avoiding the immediate neighbours of a specified node
+match (d {name:'D'})-[:distance]-(b)
+with collect(distinct b.name) as neighbors
+match (n)-[r:distance]->(m)
+where not (n.name in (neighbors+'D')) and not (m.name in (neighbors+'D'))
+return n, r, m
+
+//finding the leaf node from 'D' involving  path via an internediate node
+match (d {name:'D'})-[:distance]-(b)-[:distance]->(leaf)
+where not((leaf)-->())
+return (leaf)
+;
+
+//finding the root node form 'D' via an intermediate node
+match (d {name:'J'})-[:distance]-(b)<-[:distance]-(root)
+where not((root)<--())
+return (root)
+
+//Graph not containing a selected neighborhood
+//Here any nodes at a path length of 1 and 2 from 'F' is not considered
+match (a {name: 'F'})-[:distance*..2]-(b)
+with collect(distinct b.name) as MyList
+match (n)-[r:distance]->(m)
+where not(n.name in MyList) and not (m.name in MyList)
+return distinct n, r, m

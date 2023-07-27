@@ -1,0 +1,57 @@
+// for the same road network graph --> refer path analytics file
+//outdegree of all nodes
+match (n:Node)-[r]->()
+return n.name as Node, count(r) as Outdegree
+order by Outdegree
+union
+match (a:Node)-[r]->(leaf)
+where not((leaf)-->())
+return leaf.name as Node, 0 as Outdegree
+
+//Indegree of all nodes
+match (n:Node)<-[r]-()
+return n.name as Node, count(r) as Indegree
+order by Indegree
+union
+match (a:Node)<-[r]-(root)
+where not((root)<--())
+return root.name as Node, 0 as Indegree
+
+//Degree of all nodes
+match (n:Node)-[r]-()
+return n.name, count(distinct r) as degree
+order by degree
+
+//Degree histogram of the graph
+match (n:Node)-[r]-()
+with n as nodes, count(distinct r) as degree
+unwind nodes as lol
+unwind lol as l
+return degree, count(nodes) , collect(l.name) as Names order by degree asc
+
+//saving degree of a node as node property.
+//Note: vizualize the graph to know that the degree is now added as a new node property
+match (n:Node)-[r]-()
+with n, count(distinct r) as degree
+set n.deg = degree
+return n.name, n.deg
+
+//match(n)-[r]-(p) return n,r,p
+
+//constructing adjacency matrix of the graph
+match (n:Node), (m:Node)
+return n.name, m.name,
+case
+when (n)-->(m) then 1
+else 0
+end as value order by value desc 
+
+//laplacian matrix of the graph
+//takes into account the degree of a node for calculation of adj matrix
+match (n:Node), (m:Node)
+return n.name, m.name,
+case
+when n.name = m.name then 1
+when (n)-->(m) then round(-1/(sqrt(toInteger(n.deg))*sqrt(toInteger(m.deg))),3)
+else 0
+end as value
