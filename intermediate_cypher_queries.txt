@@ -1,0 +1,886 @@
+//testing equality
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Tom Hanks'
+AND m.year = 2013
+RETURN m.title
+
+//tetsing inequality
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name <> 'Tom Hanks'
+AND m.title = 'Captain Phillips'
+RETURN p.name
+
+//tetsing lees gthan or greater than
+MATCH (m:Movie) WHERE m.title = 'Toy Story'
+RETURN
+    m.year < 1995 AS lessThan, //  Less than (false)
+    m.year <= 1995 AS lessThanOrEqual, // Less than or equal(true)
+    m.year > 1995 AS moreThan, // More than (false)
+    m.year >= 1995 AS moreThanOrEqual // More than or equal (true)
+
+//Testing ranges
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Tom Hanks'
+AND  2005 <= m.year <= 2010
+RETURN m.title, m.released
+
+//using OR
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Tom Hanks'
+OR m.title = 'Captain Phillips'
+RETURN p.name, m.title
+
+//Testing NULL property values
+MATCH (p:Person)
+WHERE p.died IS NOT NULL
+AND p.born.year >= 1985
+RETURN p.name, p.born, p.died
+
+//Testing IS NULL predicate
+MATCH (p:Person)
+WHERE p.died IS NULL
+AND p.born.year <= 1922
+RETURN p.name, p.born, p.died
+
+//returning labels of a node
+MATCH (p:Person)
+WHERE  p.born.year > 1960
+AND p:Actor
+AND p:Director
+RETURN p.name, p.born, labels(p)
+
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)<-[:DIRECTED]-(p)
+WHERE  p.born.year > 1960
+RETURN p.name, p.born, labels(p), m.title
+
+//finding relationship types
+MATCH (p:Person)-[r]->(m:Movie)
+WHERE  p.name = 'Tom Hanks'
+RETURN m.title AS movie, type(r) AS relationshipType
+
+//cheking for a value in list
+MATCH (m:Movie)
+WHERE "Israel" IN m.countries
+RETURN m.title, m.languages, m.countries
+
+//Write and execute a query to return the names of directors of horror movies 
+//released in the year 2000. Use the year property of the Movie node to do the comparison 
+//as well as the name of "Horror" for the Genre node
+match(p:Person)-[r:DIRECTED]-(m:Movie)-[ge:IN_GENRE]-(g:Genre{name:'Horror'}) 
+where m.year=2000 
+return count(p.name)
+
+//Write and execute a query to return all Movie nodes in the graph that do not have a tmdbId property.
+match(m:Movie) where m.tmdbId IS NULL return count(m)
+
+//Write and execute a query to return the titlxes of all movies that do not have a poster.
+match(m:Movie) where m.poster IS NULL return count(m)
+
+//write and execute a query to return people born in the 1950’s (1950 - 1959) that are both Actors and Directors.
+match(p:Person) where 1950 <=p.born.year <= 1959 
+and p:Actor and p:Director return count(p.name)
+
+//Write and execute a query to return people who both acted in and directed a movie released in the German language
+match(p:Person)-[r:ACTED_IN]-(m:Movie)-[s:DIRECTED]-(p) where 'German'in m.languages or " German" in m.languages return distinct p.name
+//Note: return distinct count(p.name) is not returning the unique count.check this
+
+//Testing strings
+//
+MATCH (m:Movie)
+WHERE  m.title STARTS WITH 'Toy Story'
+RETURN m.title, m.released
+
+//
+MATCH (m:Movie)
+WHERE  m.title ENDS WITH ' I'
+RETURN m.title, m.released
+
+//
+MATCH (m:Movie)
+WHERE  m.title CONTAINS 'River'
+RETURN m.title, m.released
+
+//CASE SENSITIVE strings
+//
+MATCH (p:Person)
+WHERE toLower(p.name) ENDS WITH 'demille'
+RETURN p.name
+//
+MATCH (p:Person)
+WHERE toUpper(p.name) ENDS WITH 'DEMILLE'
+RETURN p.name
+
+//
+MATCH (p:Person)
+WHERE toUpper(p.name) CONTAINS ' DE ' //here it checks for a 
+//middle name DE. If space is not given, then it returns all 
+//names where the pattern is present irrespective of its position
+RETURN p.name
+
+//Indexes for queries
+EXPLAIN MATCH (m:Movie)
+WHERE  m.title STARTS WITH 'Toy Story'
+RETURN m.title, m.released
+
+//Write and execute a query to return all Movie titles in the graph that have a title that begins with "Life is".
+match(m:Movie) where toLower(m.title) starts with "life is" return m.title
+
+//Write and execute a query to return the name of the person, their role, and the movie title where the role played by the actors or director had a value that included 'dog' (case-insensitive)? 
+//That is, the role could contain "Dog", "dog", or even "DOG".
+match(p:Person)-[r]-(m:Movie) where toLower(r.role) contains 'dog'
+return p.name,r.role,m.title
+
+//exists check
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE  p.name = 'Tom Hanks'
+AND exists {(p)-[:DIRECTED]->(m)}
+RETURN p.name, labels(p), m.title
+
+//profiling queries
+PROFILE MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE  p.name = 'Tom Hanks'
+AND exists {(p)-[:DIRECTED]->(m)}
+RETURN m.title
+//The above query could be optimized as follows
+PROFILE MATCH (p:Person)-[:ACTED_IN]->(m:Movie)<-[:DIRECTED]-(p)
+WHERE  p.name = 'Tom Hanks'
+RETURN  m.title
+
+//not exists
+
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE  p.name = 'Tom Hanks'
+AND NOT exists {(p)-[:DIRECTED]->(m)}
+RETURN  m.title
+
+//Write and execute a query to return the titles of all movies that Rob Reiner directed, but did not act in.
+match(p:Person{name:'Rob Reiner'})-[r:DIRECTED]-(m:Movie)
+where NOT EXISTS {(p)-[s:ACTED_IN]-(m)} return m.title
+
+//multiple match clause
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+WHERE m.year > 2000
+MATCH (m)<-[:DIRECTED]-(d:Person)
+RETURN a.name, m.title, d.name
+
+//Using multiple patterns in the MATCH clause
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie),
+      (m)<-[:DIRECTED]-(d:Person)
+WHERE m.year > 2000
+RETURN a.name, m.title, d.name
+
+//USing a single patern for the query above
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)<-[:DIRECTED]-(d:Person)
+WHERE m.year > 2000
+RETURN a.name, m.title, d.name
+
+//optional match
+MATCH (m:Movie) WHERE m.title = "Kiss Me Deadly"
+MATCH (m)-[:IN_GENRE]->(g:Genre)<-[:IN_GENRE]-(rec:Movie)
+OPTIONAL MATCH (m)<-[:ACTED_IN]-(a:Actor)-[:ACTED_IN]->(rec)
+RETURN rec.title, a.name
+
+//Here is a query that returns the titles of all Film Noir movies and the users who rated them.
+MATCH (m:Movie)-[:IN_GENRE]->(g:Genre)
+WHERE g.name = 'Film-Noir'
+MATCH (m)<-[:RATED]-(u:User)
+RETURN m.title, u.name
+
+//Modify and execute this query so that the test for users who rated the movie are optional.
+MATCH (m:Movie)-[:IN_GENRE]->(g:Genre)
+WHERE g.name = 'Film-Noir'
+OPTIONAL MATCH (m)<-[:RATED]-(u:User)
+RETURN m.title, u.name
+
+//ordering results
+MATCH (p:Person)
+WHERE p.born.year = 1980
+RETURN p.name AS name,
+p.born AS birthDate
+ORDER BY p.born //we can use ASC/DESC
+
+//returning results without null
+MATCH (p:Person)
+WHERE p.born IS NOT NULL
+RETURN p.name AS name, p.born AS birthDate
+ORDER BY p.born DESC
+
+//ordering multiple results
+
+MATCH (p:Person)-[:DIRECTED | ACTED_IN]->(m:Movie)
+WHERE p.name = 'Tom Hanks'
+OR p.name = 'Keanu Reeves'
+RETURN  m.year, m.title
+ORDER BY m.year DESC , m.title
+
+//return movie titles from high to low IMDB rating
+match(m:Movie) where m.imdbRating IS NOT NULL return m.title order by m.imdbRating DESC
+
+//Youngest actor in highest rated movie
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.imdbRating IS NOT NULL
+RETURN m.title, m.imdbRating, p.name ,p.born
+ORDER BY m.imdbRating DESC, p.born DESC
+
+//Limiting or Counting Results Returned
+//
+MATCH (m:Movie)
+WHERE m.released IS NOT NULL
+RETURN m.title AS title,
+m.released AS releaseDate
+ORDER BY m.released DESC LIMIT 100
+
+//youngest person in the graph
+MATCH (p:Person) WHERE
+p.born IS NOT NULL
+RETURN p.name as name,
+p.born AS birthDate
+ORDER BY p.born DESC LIMIT 1
+
+//Skipping some results
+MATCH (p:Person)
+WHERE p.born.year = 1980
+RETURN  p.name as name,
+p.born AS birthDate
+ORDER BY p.born SKIP 40 LIMIT 10 //In this query, we return 10 rows representing page 5, where each page contains 10 rows.
+
+//A movie has a property, imdbRating.
+// Not all movies have a value for this property. 
+//Write and execute a query to determine the lowest 
+//imdbRating that a movie has in our graph.
+match(m:Movie) where m.imdbRating is not null return m.title,m.imdbRating order by m.imdbRating ASC limit 1
+
+//eliminating duplicate values
+MATCH (p:Person)-[:ACTED_IN| DIRECTED]->(m)
+WHERE m.title = 'Toy Story'
+MATCH (p)-[:ACTED_IN]->()<-[:ACTED_IN]-(p2:Person)
+RETURN  distinct p.name, p2.name
+//Note: Here the query above returns the names people who acted or directed the movie Toy Story and then retrieves all people who acted in the same movie
+
+//Map Projections to Return Data
+//return data is without the internal node information, that is, only property values.
+MATCH (p:Person)
+WHERE p.name CONTAINS "Thomas"
+RETURN p { .* } AS person
+ORDER BY p.name ASC
+//Note:This query returns an object named person 
+//that contains all of the property values for the node. 
+//It does not contain any of the internal information 
+//for the node such as its labels or id.
+
+//To customize what properties you return in the objects
+MATCH (p:Person)
+WHERE p.name CONTAINS "Thomas"
+RETURN p { .name, .born } AS person
+ORDER BY p.name
+
+//adding information to the objects returned that are not part of the data in the graph.
+MATCH (m:Movie)<-[:DIRECTED]-(d:Director)
+WHERE d.name = 'Woody Allen'
+RETURN m {.*, favorite: true} AS movie
+//Note: Here, besides returning all property values for each Woody Allen movie, 
+a property of favorite with a value of true for each Movie object is also returned.
+
+//Changing data returned
+//Age calculation from the data 
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.title CONTAINS 'Toy Story' AND
+p.died IS NULL
+RETURN m.title AS movie,
+p.name AS actor,
+p.born AS dob,
+date().year - p.born.year AS ageThisYear //for every row, age is calculated and returned
+
+//concat string data to return
+
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.title CONTAINS 'Toy Story' AND
+p.died IS NULL
+RETURN 'Movie: ' + m.title AS movie,
+p.name AS actor,
+p.born AS dob,
+date().year - p.born.year AS ageThisYear
+
+//CASE clause: conditionally changing data returned
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE p.name = 'Henry Fonda'
+RETURN m.title AS movie,
+CASE
+WHEN m.year < 1940 THEN 'oldies'
+WHEN 1940 <= m.year < 1950 THEN 'forties'
+WHEN 1950 <= m.year < 1960 THEN 'fifties'
+WHEN 1960 <= m.year < 1970 THEN 'sixties'
+WHEN 1970 <= m.year < 1980 THEN 'seventies'
+WHEN 1980 <= m.year < 1990 THEN 'eighties'
+WHEN 1990 <= m.year < 2000 THEN 'nineties'
+ELSE  'two-thousands'
+END
+AS timeFrame
+
+
+//We want to return information about actors who acted in the Toy Story movies. We want to return the age that an actor will turn this year or that the actor died.
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.title CONTAINS 'Toy Story'
+RETURN m.title AS movie,
+p.name AS actor,
+p.born AS dob,
+CASE WHEN p.died IS NULL THEN date().year - p.born.year WHEN p.died IS NOT NULL THEN "Died" END
+AS ageThisYear
+
+//to return "Short" for runTime if the movie’s runtime is < 120 (minutes) and "Long" for runTime if the movie’s runtime is >= 120
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE p.name = 'Charlie Chaplin'
+RETURN m.title AS movie,
+case 
+when m.runtime<120 then 'Short'
+when m.runtime>=120 then 'Long'
+end
+AS runTime
+
+//Using counnt to aggregate data
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+WHERE a.name = 'Tom Hanks'
+RETURN a.name AS actorName,
+count(*) AS numMovies
+//Note : count(*) -->includes null values in 'n' during Counting
+// count(n) --> returns only non null 'n'values only
+
+//returning list
+MATCH (p:Person)
+RETURN p.name, [p.born, p.died] AS lifeTime
+LIMIT 10
+
+//using collect() to create a list
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+RETURN a.name AS actor,
+count(*) AS total,
+collect(m.title) AS movies
+ORDER BY total DESC LIMIT 10
+//Note: This query returns a list of movie titles associated with each actor. 
+//The rows are presented such that
+//actors with the greatest number of titles are returned first
+
+//eliminate duplicate in a lists
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+WHERE m.year = 1920
+RETURN  collect( DISTINCT m.title) AS movies,
+collect( a.name) AS actors
+
+//accessing elements of a list
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+RETURN m.title AS movie,
+collect(a.name)[0] AS castMember,
+size(collect(a.name)) as castSize
+
+
+//return a slice of collection from lists 
+//https://neo4j.com/docs/cypher-manual/current/functions/list/
+MATCH (a:Person)-[:ACTED_IN]->(m:Movie)
+RETURN m.title AS movie,
+collect(a.name)[2..] AS castMember,
+size(collect(a.name)) as castSize
+
+//size() function
+MATCH (actor:Person)-[:ACTED_IN]->(m:Movie)<-[:DIRECTED]-(director:Person)
+RETURN actor.name, director.name,
+size(collect(m)) AS collaborations,
+collect(m.title) AS movies
+
+//What genre of movies is the highest and how many movies are in that genre?
+//Answer using count()
+MATCH (g:Genre)<-[:IN_GENRE]-(m:Movie)
+RETURN g.name AS genre,
+count(m) AS numMovies
+ORDER BY count(m) DESC LIMIT 1
+
+//Answer using size()
+MATCH (g:Genre)<-[:IN_GENRE]-(m:Movie)
+RETURN g.name AS genre,
+size(collect(m)) AS numMovies
+ORDER BY size(collect(m)) DESC LIMIT 1
+//NOTE: DO query profiling to check its efficiency
+
+//List comprehension
+MATCH (m:Movie)
+RETURN m.title as movie,
+[x IN m.countries WHERE x CONTAINS 'USA' OR x CONTAINS 'Germany']
+AS country LIMIT 500
+
+//Pattern comprehension
+MATCH (m:Movie)
+WHERE m.year = 2015
+RETURN m.title,
+[(dir:Person)-[:DIRECTED]->(m) | dir.name] AS directors,
+[(actor:Person)-[:ACTED_IN]->(m) | actor.name] AS actors
+
+//pattern comprehension to create a list where we specify a filter for the pattern.
+MATCH (a:Person {name: 'Tom Hanks'})
+RETURN [(a)-->(b:Movie)
+WHERE b.title CONTAINS "Toy" | b.title + ": " + b.year]
+AS movies
+
+//Working with maps
+//to return days in feb month
+//Accessing value with key
+RETURN {Jan: 31, Feb: 28, Mar: 31, Apr: 30 ,
+May: 31, Jun: 30 , Jul: 31, Aug: 31, Sep: 30,
+Oct: 31, Nov: 30, Dec: 31}['Feb'] AS daysInFeb
+
+//Accessing value with . notation
+RETURN {Jan: 31, Feb: 28, Mar: 31, Apr: 30 ,
+May: 31, Jun: 30 , Jul: 31, Aug: 31, Sep: 30,
+Oct: 31, Nov: 30, Dec: 31}.Feb AS daysInFeb
+
+//MAP projections to return only specified properties
+MATCH (m:Movie)
+WHERE m.title CONTAINS 'Matrix'
+RETURN m { .title, .released } AS movie
+
+//Most active director?
+//Using count() write a query to return the number of movies a person directed.
+//What is the highest number of movies a director directed in our graph?
+match(p:Person)-[:DIRECTED]-(m:Movie) 
+return p.name as Name,collect(m.title), count(m.title) as MovieCount
+ order by MovieCount DESC
+
+ //What movie title had the largest number of actors acted in it? 
+ match(a:Actor)-[:ACTED_IN]-(m:Movie) 
+ return m.title, collect(a.name), count(a.name) as ActorNumber 
+  order by ActorNumber DESC limit 5
+
+//For the largest cast, how many actors were in the movies with the title "Hamlet"?
+use the same query as above
+
+//Date and Time data in Cypher
+//Cypher has these basic formats for storing date and time data.
+//RETURN date(), datetime(), time()
+
+//create a node in the graph with the following properties
+
+MERGE (x:Test {id: 1})
+SET x.date = date(),
+    x.datetime = datetime(),
+    x.time = time()
+RETURN x
+
+//check type of properties in the graph
+CALL apoc.meta.nodeTypeProperties()
+
+//extracting components of date and time
+MATCH (x:Test {id: 1})
+RETURN x.date.day, x.date.year,
+x.datetime.year, x.datetime.hour,
+x.datetime.minute
+
+//Setting date values
+MATCH (x:Test {id: 1})
+SET x.date1 = date('2022-01-01'),
+    x.date2 = date('2022-01-15')
+RETURN x
+
+//setting datetime values
+MATCH (x:Test {id: 1})
+SET x.datetime1 = datetime('2022-01-04T10:05:20'),
+    x.datetime2 = datetime('2022-04-09T18:33:05')
+RETURN x
+
+//working with durations
+MATCH (x:Test {id: 1})
+RETURN duration.between(x.date1,x.date2)
+//Note:It returns a duration value that represents the days and months and times between the two values
+
+//return duration in days between 2 values
+
+MATCH (x:Test {id: 1})
+RETURN duration.inDays(x.datetime1,x.datetime2).days
+
+//adding a duration of 6 months to the date
+MATCH (x:Test {id: 1})
+RETURN x.date1 + duration({months: 6})
+
+//using apoc libraty to format date
+MATCH (x:Test {id: 1})
+RETURN x.datetime as Datetime,
+apoc.temporal.format( x.datetime, 'HH:mm:ss.SSSS')
+AS formattedDateTime
+
+//
+MATCH (x:Test {id: 1})
+RETURN apoc.date.toISO8601(x.datetime.epochMillis, "ms")
+AS iso8601
+
+//How long did Charlie Chaplin live?
+We need to calculate how old Charlie Chaplin was when he died. What code do you use?
+MATCH (p:Person)
+WHERE p.name = 'Charlie Chaplin'
+RETURN duration.between(p.born,p.died).years
+
+//create a node as below
+MERGE (x:Test {id: 1})
+SET
+x.date = date(),
+x.datetime = datetime(),
+x.timestamp = timestamp(),
+x.date1 = date('2022-04-08'),
+x.date2 = date('2022-09-20'),
+x.datetime1 = datetime('2022-02-02T15:25:33'),
+x.datetime2 = datetime('2022-02-02T22:06:12')
+RETURN x
+
+//Write a query to retrieve this Test node and calculate the number of minutes between datetime1 and datetime2.
+match(x:Test) return duration.between(x.datetime1,x.datetime2).minutes
+//Note: in place of .minutes, we can use .seconds,.hours,.days to extract the required fields
+
+//Graph Traversal
+//multiple anchors
+PROFILE
+MATCH (p1:Person)-[:ACTED_IN]->(m1)
+MATCH (m2)<-[:ACTED_IN]-(p2:Person)
+WHERE p1.name = 'Tom Hanks'
+AND p2.name = 'Meg Ryan'
+AND m1 = m2
+RETURN m1.title
+//note: In this query, all p1 nodes are retrieved as well as all p2 nodes. 
+//This query has two sets of anchor nodes. It retrieves the anchor nodes before the equality filter is applied. 
+//The query planner tries to apply filters as early as possible to reduce cardinality
+
+//Varying length traversal
+//shortest path
+//Here for finding shortest path, relationship type is not considered
+MATCH p = shortestPath((p1:Person)-[*]-(p2:Person))
+WHERE p1.name = "Eminem"
+AND p2.name = "Charlton Heston"
+RETURN  p
+
+
+//limiting the realtionship to specific types
+MATCH p = shortestPath((p1:Person)-[:ACTED_IN*]-(p2:Person))
+WHERE p1.name = "Eminem"
+AND p2.name = "Charlton Heston"
+RETURN  p
+
+//to retrieve all Person nodes that are exactly two hops away from Eminem using the ACTED_IN relationship
+MATCH (p:Person {name: 'Eminem'})-[:ACTED_IN*2]-(others:Person)
+RETURN  others.name
+
+//to retrieve all Person nodes that are exactly four hops away from Eminem using the ACTED_IN relationship
+MATCH (p:Person {name: 'Eminem'})-[:ACTED_IN*4]-(others:Person)
+RETURN  others.name
+
+//to retrieve all Person nodes that are up to four hops away from Eminem using the ACTED_IN relationship
+MATCH (p:Person {name: 'Eminem'})-[:ACTED_IN*1..4]-(others:Person)
+RETURN  others.name
+
+//Actors 2 hops away from Robert Blake.
+//Write and execute the query to return the names of actors that are 2 hops away from Robert Blake using the ACTED_IN relationship.
+match(a:Actor{name:'Robert Blake'})-[:ACTED_IN*2]-(a1:Actor) return distinct a1.name
+
+//Actors 4 hops away from Robert Blake.
+//Write and execute the query to return the distinct names of actors that are 4 hops away from Robert Blake using the ACTED_IN relationship
+match(a:Actor{name:'Robert Blake'})-[:ACTED_IN*4]-(a1:Actor) return distinct a1.name
+
+//Actors up to 4 hops away from Robert Blake.
+//Write and execute the query to return the unique names of actors that up to 4 hops away from Robert Blake using the ACTED_IN relationship
+match(a:Actor{name:'Robert Blake'})-[:ACTED_IN*1..4]-(a1:Actor) return distinct a1.name
+
+//PIPELINING QUERIES
+//USAGE OF WITH CLAUSE
+// define and initialize variables to be used in the query with a WITH clause.
+WITH 'Tom Hanks' AS actorName
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = actorName
+RETURN m.title AS movies
+
+//USING WITH TO REDEFINE SCOPE
+WITH  'toy story' AS mt, 'Tom Hanks' AS actorName
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WITH m, toLower(m.title) AS movieTitle
+WHERE p.name = actorName
+AND movieTitle CONTAINS mt
+RETURN m.title AS movies, movieTitle
+
+//limiting results
+WITH  'Tom Hanks' AS theActor
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = theActor
+RETURN m.title AS movies LIMIT 2
+
+//limiting results using with
+WITH  'Tom Hanks' AS theActor
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = theActor
+WITH m  LIMIT 2
+// possibly do more with the two m nodes
+RETURN m.title AS movies
+
+//using with to order results
+WITH  'Tom Hanks' AS theActor
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = theActor
+WITH m ORDER BY m.year LIMIT 5
+// possibly do more with the five m nodes in a particular order
+RETURN m.title AS movies, m.year AS yearReleased
+
+//Using map projections in a WITH clause
+MATCH (n:Movie)
+WHERE n.imdbRating IS NOT NULL
+AND n.poster IS NOT NULL
+WITH n {
+  .title,
+  .year,
+  .languages,
+  .plot,
+  .poster,
+  .imdbRating,
+  directors: [ (n)<-[:DIRECTED]-(d) | d { tmdbId:d.imdbId, .name } ]
+}
+ORDER BY n.imdbRating DESC LIMIT 4
+RETURN collect(n)
+
+//Note:his type of data returned is commonly used by GraphQL and JavaScript applications
+//Although this is nice for processing on the client side, it takes more memory on 
+//the server as records cannot be streamed to the client but are collected 
+//into the list structure on the server.
+
+//to find the highest revenue movie
+WITH  'Tom Hanks' AS theActor
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = theActor
+AND m.revenue IS NOT NULL
+// Use WITH here to limit the movie node to 1 and order it by revenue
+WITH m order by m.revenue desc limit 1
+RETURN m.revenue AS revenue, m.title AS title
+
+//Wuery for map projections
+MATCH (n:Movie)
+WHERE n.imdbRating IS NOT NULL and n.poster IS NOT NULL
+// Add WITH clause to return custom data for each movie
+with n {.title, .imdbRating, actors:[(n)<-[:ACTED_IN]-(a) | a {name:a.name }], Genres:[(n)-[:IN_GENRE]->(g)| g {genre: g.name }]}
+ORDER BY n.imdbRating DESC LIMIT 4
+RETURN collect(n)
+
+//
+MATCH (n:Movie)
+WHERE n.imdbRating IS NOT NULL AND n.poster IS NOT NULL
+WITH n {
+  .title,
+  .imdbRating,
+  actors: [ (n)<-[:ACTED_IN]-(p) | p { tmdbId:p.imdbId, .name } ],
+  genres: [ (n)-[:IN_GENRE]->(g) | g {.name}]
+}
+ORDER BY n.imdbRating DESC
+LIMIT 4
+RETURN collect(n)
+
+//Pipelining queries
+
+WITH  'Tom Hanks' AS theActor
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = theActor
+WITH m  LIMIT 5 //limiting only 5 movies and those 5 movies is used in the next match stmt
+MATCH (d:Person)-[:DIRECTED]->(m)
+RETURN d.name AS director,
+m.title AS movies
+//note:The WITH clause enables us to pipeline the results of the first query into the second query.
+// With this simple query, m need not be redefined or scoped.
+
+//using with for aggragation
+MATCH (:Movie {title: 'Toy Story'})-[:IN_GENRE]->(g:Genre)<-[:IN_GENRE]-(m)
+WHERE m.imdbRating IS NOT NULL
+WITH g.name AS genre,
+count(m) AS moviesInCommon,
+sum(m.imdbRating) AS total
+RETURN genre, moviesInCommon,
+total/moviesInCommon AS score
+ORDER By score DESC
+
+//
+MATCH (u:User {name: "Misty Williams"})-[r:RATED]->(:Movie)
+WITH u, avg(r.rating) AS average
+MATCH (u)-[r:RATED]->(m:Movie)
+WHERE r.rating > average
+RETURN average , m.title AS movie,
+r.rating as rating
+ORDER BY rating DESC
+
+//Using WITH for collecting
+MATCH (m:Movie)--(a:Actor)
+WHERE m.title CONTAINS 'New York'
+WITH m, collect (a.name) AS actors,
+count(*) AS numActors
+RETURN m.title AS movieTitle, actors
+ORDER BY numActors DESC
+
+//
+MATCH (m:Movie)<-[:ACTED_IN]-(a:Actor)
+WHERE m.title CONTAINS 'New York'
+WITH m, collect (a.name) AS actors,
+count(*) AS numActors
+ORDER BY numActors DESC
+RETURN collect(m { .title, actors, numActors }) AS movies
+
+//using 'limit' early for query optimization
+PROFILE MATCH (p:Actor)
+WHERE p.born.year = 1980
+WITH p  LIMIT 3
+MATCH (p)-[:ACTED_IN]->(m:Movie)
+WITH p, collect(m.title) AS movies
+RETURN p.name AS actor,  movies
+
+//using distinct when required
+MATCH (p:Actor)
+WHERE p.born.year = 1980
+WITH p  LIMIT 3
+MATCH (p)-[:ACTED_IN]->(m:Movie)-[:IN_GENRE]->(g:Genre)
+WITH p, collect(DISTINCT g.name) AS genres
+RETURN p.name AS actor, genres
+
+//to return the names of Directors who directed movies that Keanu Reeves acted in. 
+// specify that you want to limit the number of rows returned to 3?
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Keanu Reeves'
+WITH m LIMIT 3
+MATCH (d:Person)-[:DIRECTED]->(m)
+RETURN collect(d.name) AS directors,
+m.title AS movies
+
+//What Tom Hanks movie had the highest average rating greater than 4?
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)<-[r:RATED]-(:User)
+WHERE p.name = 'Tom Hanks'
+WITH m, avg(r.rating) AS avgRating
+WHERE avgRating > 4
+RETURN m.title AS Movie, avgRating AS `AverageRating`
+ORDER BY avgRating DESC
+
+//Using unwind
+
+MATCH (m:Movie)-[:ACTED_IN]-(a:Actor)
+WHERE a.name = 'Tom Hanks'
+UNWIND m.languages AS lang
+RETURN m.title AS movie,
+m.languages AS languages,
+lang AS language
+
+//
+MATCH (m:Movie)
+UNWIND m.languages AS lang
+WITH m, trim(lang) AS language // trim() function to ensure there are no extraneous whitespace characters in the language name
+// this automatically, makes the language distinct because it's a grouping key
+WITH language, collect(m.title) AS movies
+RETURN language, movies[0..10] //return upto 10 movies for each lang
+
+//How many movies released in the UK are in the graph?
+
+MATCH (m:Movie)
+UNWIND m.countries as c 
+with m,trim(c) as country
+with country, collect(m.title) as movielist
+RETURN country, size(movielist) //using size()
+
+//same query using count()
+MATCH (m:Movie)
+UNWIND m.countries as c 
+with m,trim(c) as country
+with country, count(m.title) as moviecount
+RETURN country, moviecount
+
+//How many movies released in Taiwan are in the graph?
+MATCH (m:Movie)
+UNWIND m.countries as c 
+with m,trim(c) as country where country='Taiwan'
+with country, count(m.title) as moviecount
+RETURN country, 
+
+//Reducing memory
+//subquery
+//performing subqueries with CALL
+
+CALL {
+   MATCH (m:Movie) WHERE m.year = 2000
+   RETURN m ORDER BY m.imdbRating DESC LIMIT 10
+}
+MATCH  (:User)-[r:RATED]->(m)
+RETURN m.title, avg(r.rating)
+
+//passing variables into subquery
+MATCH (m:Movie)
+CALL {
+    WITH m
+    MATCH (m)<-[r:RATED]-(u:User)
+     WHERE r.rating = 5
+    RETURN count(u) AS numReviews
+}
+RETURN m.title, numReviews
+ORDER BY numReviews DESC
+
+//Combining query results with UNION
+MATCH (m:Movie) WHERE m.year = 2000
+RETURN {type:"movies", theMovies: collect(m.title)} AS data
+UNION ALL
+MATCH (a:Actor) WHERE a.born.year > 2000
+RETURN { type:"actors", theActors: collect(DISTINCT a.name)} AS data
+
+//Using UNION with subqueries
+MATCH (p:Person)
+WITH p LIMIT 100
+CALL {
+  WITH p
+  OPTIONAL MATCH (p)-[:ACTED_IN]->(m:Movie)
+  RETURN m.title + ": " + "Actor" AS work
+UNION
+  WITH p
+  OPTIONAL MATCH (p)-[:DIRECTED]->(m:Movie)
+  RETURN m.title+ ": " +  "Director" AS work
+}
+RETURN p.name, collect(work)
+
+//How many movies were in the largest Genre category for movies released in France?
+MATCH (g:Genre)
+CALL { WITH g
+MATCH (g)<-[:IN_GENRE]-(m) WHERE 'France' IN m.countries
+RETURN count(m) AS numMovies
+}
+RETURN g.name AS Genre, numMovies ORDER BY numMovies DESC
+
+//query that returns actor information for the year 2015:
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.year = 2015
+RETURN "Actor" AS type,  //it will have the title as Actor in the output
+p.name AS workedAs,
+collect(m.title) AS movies
+
+//returns actor and director information for the year 2015:
+MATCH (m:Movie)<-[:ACTED_IN]-(p:Person)
+WHERE m.year = 2015
+RETURN "Actor" AS type, //this adds the string 'Actor'
+p.name as workedas,
+collect(m.title)as movies
+union
+match(m:Movie)<-[:DIRECTED]-(p:Person)
+WHERE m.year = 2015
+RETURN "Director" AS type, //this adds the string 'Director'
+p.name as workedas,
+collect(m.title)as movies
+
+//view the property types for relationships in the graph by executing this query:
+CALL db.schema.relTypeProperties()
+
+//view the uniqueness constraint indexes in the graph by executing this query:
+SHOW CONSTRAINTS
+
+//parameters in cypher using $ symbol
+
+
+//setting a parameter
+:param actorName: 'Tom Hanks'
+
+//after setting the parameter, run the below query
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name = $actorName
+RETURN m.released AS releaseDate,
+m.title AS title
+ORDER BY m.released DESC
+
+//setting a number . this will be a float
+:param number: 10
+:param number=> 10 // this forces the number to be a interger

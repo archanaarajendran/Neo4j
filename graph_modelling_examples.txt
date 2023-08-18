@@ -1,0 +1,175 @@
+//https://neo4j.com/docs/cypher-manual --> CYPHER MANUAL
+//create RATED relationships that include the rating property.
+//for the nodes matched below
+
+MATCH (sandy:User {name: 'Sandy Jones'})
+MATCH (clinton:User {name: 'Clinton Spencer'})
+MATCH (apollo:Movie {title: 'Apollo 13'})
+MATCH (sleep:Movie {title: 'Sleepless in Seattle'})
+MATCH (hoffa:Movie {title: 'Hoffa'})
+MERGE (sandy)-[:RATED {rating:5}]->(apollo)
+MERGE (sandy)-[:RATED {rating:4}]->(sleep)
+MERGE (clinton)-[:RATED {rating:3}]->(apollo)
+MERGE (clinton)-[:RATED {rating:3}]->(sleep)
+MERGE (clinton)-[:RATED {rating:3}]->(hoffa)
+
+//usecases on Movie database
+//1.What people acted in a movie 'Sleepless in seattle'
+match(p:Person)-[:ACTED_IN]->(m:Movie{title:'Sleepless in Seattle'}) return p.name as Actor
+
+//2.What person directed a movie- 'Hoffa'?
+match(p:Person)-[:DIRECTED]->(m:Movie{title:'Hoffa'}) return p.name as Director
+
+//Use case #3: What movies did a person 'Tom Hanks'act in?
+match(p:Person{name:'Tom Hanks'})-[:ACTED_IN]-(m:Movie) return m.title as Movie
+
+//Use case #4: How many users rated a movie 'Apollo 13?
+match(u:User)-[:RATED]-(m:Movie{title:'Apollo 13'}) return count(u) as ReviewerCount
+
+//Use case #5: Who was the youngest person to act in a movie 'Hoffa?
+match(p:Person)-[:ACTED_IN]-(m:Movie{title:'Hoffa'}) return p.name as Actor,p.born as YearBorn order by p.born DESC limit 1
+
+//Use case #6: What role did a person play in a movie?
+//checking for Meg Ryan for the movie Sleepless in seattle
+match(p:Person{name:'Meg Ryan'})-[r:ACTED_IN]-(m:Movie{title:'Sleepless in Seattle'}) return r.role as Role
+
+//Use case #7: What is the highest rated movie in a particular year according to imDB?
+//method 1 - converting the date string to date format and extracting only the year
+match(m:Movie) with m, date(m.released) as reldate  where reldate.year=1995 return m.title 
+
+//method 2
+MATCH (m:Movie)
+WHERE m.released STARTS WITH '1995'// since released is a string 'starts with' is used
+RETURN  m.title as Movie, m.imdbRating as Rating ORDER BY m.imdbRating DESC LIMIT 1
+
+//Use case #8: What drama movies did an actor act in?
+match(p:Person{name:'Tom Hanks'})-[:ACTED_IN]-(m:Movie) where 'Drama' in m.genres return m.title
+//Note: Here genres is a list. So giving the condition directly as (m:Movie{genre:'Drama'}) will not return
+//any result.
+
+//Use case #9: What users gave a movie a rating of 5?
+match(u:User)-[r:RATED]-(m:Movie{title:'Apollo 13'}) where r.rating=5 return u.name
+
+//To return the entire graph
+match(n) return n
+
+//Query profiling
+PROFILE MATCH (p:Person)-[:ACTED_IN]-()
+WHERE p.born < '1950'
+RETURN p.name
+
+//Refactoring the graph
+//Case1:optimizing the cypher query by adding new labels to a node
+//To add a new label 'Actor ' to the graph which was previously infered from a relation
+MATCH (p:Person)
+WHERE exists ((p)-[:ACTED_IN]-())
+SET p:Actor
+
+// Write a query to label the Person nodes that have the outgoing relationship of DIRECTED to be labeled Director.
+
+MATCH (p:Person) WHERE exists ((p)-[:DIRECTED]-()) SET p:Director
+
+//Case2:Avoiding data duplication
+//Intial model has language as node property. Here, language property is changed to be a node
+MATCH (m:Movie)
+UNWIND m.languages AS language
+WITH  language, collect(m) AS movies
+MERGE (l:Language {name:language})
+WITH l, movies
+UNWIND movies AS m
+WITH l,m
+MERGE (m)-[:IN_LANGUAGE]->(l);
+MATCH (m:Movie)
+SET m.languages = null
+
+//Finding the Italian movie before refactoring
+MATCH (m:Movie)
+WHERE 'Italian' IN m.languages
+RETURN m.title
+
+//Finding the Italian movie after refactoring
+match(m:Movie)-[:IN_LANGUAGE]-(l:Language{name:'Italian'}) return m.title
+
+//Refactoring the genre property to a node
+MATCH (m:Movie)
+UNWIND m.genres AS genre
+WITH genre, collect(m) AS movies
+MERGE (g:genre {name:genre})
+WITH g, movies
+UNWIND movies AS m
+WITH g,m
+MERGE (m)-[:IN_GENRE]->(g); 
+match(m:Movie) set m.genre=null //[OR]
+
+MATCH (m:Movie)
+UNWIND m.genres AS genre
+MERGE (g:Genre {name: genre})
+MERGE (m)-[:IN_GENRE]->(g)
+SET m.genres = null;
+
+//query to find title of movie where an actor acted in a particular genre 
+MATCH (p:Actor)-[:ACTED_IN]-(m:Movie)
+WHERE p.name = 'Tom Hanks' AND
+'Drama' IN m.genres
+RETURN m.title AS Movie
+
+//After refactoring
+match(a:Actor{name:'Tom Hanks'})-[:ACTED_IN]-(m:Movie)-[:IN_GENRE]-(g:genre{name:'Drama'}) return m.title
+
+//SPECIALIZED relationships
+//creating the rerlationship for Acted in_ year and directed_year
+MATCH (n:Actor)-[:ACTED_IN]->(m:Movie)
+CALL apoc.merge.relationship(n,
+  'ACTED_IN_' + left(m.released,4),
+  {},
+  {},
+  m ,
+  {}
+) YIELD rel
+RETURN count(*) AS `Number of relationships merged`;
+
+//sample query
+MATCH (p:Actor)-[:ACTED_IN_1995]->(m:Movie)
+WHERE p.name = 'Tom Hanks'
+RETURN m.title AS Movie
+
+//for specific directed_year relationship
+MATCH (d:Director)-[:DIRECTED]->(m:Movie)
+CALL apoc.merge.relationship(d,
+  'DIRECTED_' + left(m.released,4),
+  {},
+  {},
+  m ,
+  {}
+) YIELD rel
+RETURN count(*) AS `Number of relationships merged`;
+
+//sample query
+MATCH (p:Person)-[:ACTED_IN_1995|DIRECTED_1995]->()
+RETURN p.name as `Actor or Director`
+
+//Speccialized relationship for rating
+MATCH (n:User)-[r:RATED]->(m:Movie)
+CALL apoc.merge.relationship(n,
+  'RATED_' + r.rating,
+  {},
+  {},
+  m,
+  {}
+) YIELD rel
+RETURN COUNT(*) AS `Number of relationships added`;
+
+//Adding Intermediate nodes//Here adding a new role node 
+
+//Steps for creating role node for every actor
+// Step1:Find an actor that acted in a Movie
+// Step2:Create a Role node
+// Step3:Create the PLAYED relationship
+    // relationship between the Actor and the Role nodes.
+// Step4:Create the IN_MOVIE relationship between
+    // the Role and the Movie nodes.
+
+MATCH (a:Actor{name:'Tom Hanks'})-[r:ACTED_IN]->(m:Movie) //Repeat the 4 lines of code for every actor to create role nodes
+MERGE (x:Role {name: r.role})
+MERGE (a)-[:PLAYED]->(x)
+MERGE (x)-[:IN_MOVIE]->(m)

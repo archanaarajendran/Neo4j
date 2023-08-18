@@ -1,0 +1,194 @@
+//Queries on Movie DBMS
+//return all the node with the label person
+MATCH (p:Person)
+RETURN p
+
+//return the person node whose name is Tom Hanks
+MATCH (p:Person {name: 'Tom Hanks'})
+RETURN p
+
+//return all the properties of the person node whose name is Bill Pullman
+match(p:Person{name:'Bill Pullman'}) return properties(p)
+
+//filtering queries using where clause
+match(p:Person) where p.name='Bill Pullman' return p
+
+//operators in CQL
+MATCH (p:Person)
+WHERE p.name = 'Tom Hanks' OR p.name = 'Rita Wilson'
+RETURN p.name, p.born
+
+//Graph traversal
+//retun the details of the node m 
+//limit--> limits the retun result only to 2 records
+match(p:Person)-[:ACTED_IN]->(m) return m limit 2
+
+//return the count of directors who directed the movie 'The Matrix'
+match(m:movie)<-[:acted_in]-(n:Person) return count(n)
+
+//movie 'Emil Eifrem' acted in
+MATCH (:Person{name:'Emil Eifrem'})-[:ACTED_IN]->(m:Movie)
+RETURN  m.title
+
+//filtering by node node labels
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE m.title='The Matrix'
+RETURN p.name
+
+//checking node labels in the where clause
+MATCH (p)-[:ACTED_IN]->(m)
+WHERE p:Person AND m:Movie AND m.title='The Matrix'
+RETURN p.name
+
+//filtering using ranges
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE 2000 <= m.released <= 2003
+RETURN p.name, m.title, m.released
+
+//return the nodes which has the value for tagline property
+MATCH (p:Person)-[:ACTED_IN]->(m:Movie)
+WHERE p.name='Jack Nicholson' AND m.tagline IS NOT NULL
+RETURN m.title, m.tagline
+
+//string functions in neo4j to check on string properties
+//Keywords-->starts with, ends with, contains
+//functions-->toUpper(), toLower()
+
+//Find all actors whose name starts with 'Michael'
+MATCH (p:Person)-[:ACTED_IN]->()
+WHERE p.name STARTS WITH 'Michael'
+RETURN p.name
+
+//String tests are case-sensitive so you may need to use the toLower() or toUpper() 
+//functions to ensure the test yields the correct results.
+MATCH (p:Person)-[:ACTED_IN]->()
+WHERE toLower(p.name) STARTS WITH 'michael'
+RETURN p.name
+
+//filtering by patterns
+// To get the persons who wrote a movie but not directed
+MATCH (p:Person)-[:WROTE]->(m:Movie)
+WHERE NOT exists( (p)-[:DIRECTED]->(m) ) // this checks for a no edge'directed' between person and movie
+RETURN p.name, m.title
+
+//filtering using lists
+//to check for a set of values --> use list in where clause
+MATCH (p:Person)
+WHERE p.born IN [1965, 1970, 1975]
+RETURN p.name, p.born
+
+//checking for a list of relation between the nodes
+//to return the name of the actor who played Neo in the movie The Matrix
+MATCH (p:Person)-[r:ACTED_IN]->(m:Movie)
+WHERE  'Neo' IN r.roles AND m.title='The Matrix'
+RETURN p.name, r.roles
+
+//to find the peroperties of the node or relationship
+//use the function 'keys()'
+match(p:Person) return p.name, keys(p)
+
+match(p:Person) return distinct keys(p)
+
+//find all the properties present in the graph
+call db.propertyKeys()
+
+//Find all the relationship types
+call db.relationshipTypes()
+
+//create a node with a property name is 'Michael Caine'
+MERGE (p:Person {name: 'Michael Caine'}) return p
+
+//chaining merge statements
+
+MERGE (p:Person {name: 'Katie Holmes'})
+MERGE (m:Movie {title: 'The Dark Knight'})
+RETURN p, m
+
+//merge to create nodes and relationships
+MERGE (p:Person {name: 'Emily Blunt'})-[:ACTED_IN]->(m:Movie {title: 'A Quiet Place'})
+RETURN p, m
+
+//Adding property to a relation inline in the merge clause
+MERGE (p:Person {name: 'Michael Caine'})
+MERGE (m:Movie {title: 'Batman Begins'})
+MERGE (p)-[:ACTED_IN {roles: ['Alfred Penny']}]->(m)
+RETURN p,m
+
+//Using set keyword to assign a property to the relationship
+MATCH (p:Person)-[r:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Michael Caine' AND m.title = 'The Dark Knight'
+SET r.roles = ['Alfred Penny']
+RETURN p, r, m
+
+//setting multiple properties
+MATCH (p:Person)-[r:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Michael Caine' AND m.title = 'The Dark Knight'
+SET r.roles = ['Alfred Penny'], r.year = 2008
+RETURN p, r, m
+
+//removing a property using keyword remove
+MATCH (p:Person)-[r:ACTED_IN]->(m:Movie)
+WHERE p.name = 'Michael Caine' AND m.title = 'The Dark Knight'
+REMOVE r.roles
+RETURN p, r, m
+
+//removing a property by setting its value to Null
+MATCH (p:Person)
+WHERE p.name = 'Gene Hackman'
+SET p.born = null
+RETURN p
+
+//customizing merge behavior using on create set /on match set / set
+// Find or create a person with this name
+MERGE (p:Person {name: 'McKenna Grace'})
+// Only set the `createdAt` property if the node is created during this query
+ON CREATE SET p.createdAt = datetime()
+// Only set the `updatedAt` property if the node was created previously
+ON MATCH SET p.updatedAt = datetime()
+// Set the `born` property regardless
+SET p.born = 2006
+//setting multiple properties
+ON CREATE SET m.released = 2020, m.tagline = `A great ride!
+RETURN p
+
+//execute it twice to observe changes
+MERGE (m:Movie {title: 'Rocketman'})
+// perform the ON MATCH setting of the matchedAt property
+on match set m.matchedAT=datetime()
+// perform the ON CREATE setting of the createdAt property
+on create set m.createdAT=datetime()
+// set the updatedAt property
+set m.updatedAt= datetime()
+RETURN m
+
+//deleting a node
+//To delete this node, we must first delete its relationships.
+//otherwise neo4j throws a error
+MATCH (m:Movie {title: 'The Matrix'})
+MERGE (p:Person {name: 'Jane Doe'})
+MERGE (p)-[:ACTED_IN]->(m)
+RETURN p, m
+
+//delete relationship first
+match(p:Person)-[r:ACTED_IN]->(m) where p.name='Jane Doe' delete(r)
+
+//Now we can delete the node Jane Doe
+match(p:Person{name:'Jane Doe'}) delete(p)
+
+//deleting node and relationship in one step
+MATCH (p:Person {name: 'Jane Doe'})
+DETACH DELETE p
+
+//Delete all the node and the relationship from the graph
+MATCH (n)
+DETACH DELETE n
+
+
+MERGE (p:Person {name: 'Jane Doe'}) RETURN p //create a node
+MATCH (p:Person {name: 'Jane Doe'}) SET p:Developer RETURN p // Add a label to a node
+MATCH (p:Person {name: 'Jane Doe'}) REMOVE p:Developer RETURN p // Delete the label from a node
+//MATCH (p:Person:Developer {name: 'Jane Doe'}) //to denote multiple labels of a node
+
+//t return all node labels in the graph
+CALL db.labels()
+

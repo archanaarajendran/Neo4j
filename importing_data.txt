@@ -1,0 +1,180 @@
+//this returns type for the node
+CALL apoc.meta.nodeTypeProperties()
+YIELD nodeType, propertyName, propertyTypes
+
+//this returns type for the relationship
+CALL apoc.meta.relTypeProperties()
+YIELD relType, propertyName, propertyTypes
+
+//1.AFter using data importer to load the csv, since the multivalued fields are strings
+//use the code below to convert them into lists post-import
+
+//Transforming movie property to lists
+MATCH (m:Movie)
+RETURN m.countries, m.languages, m.genres
+
+MATCH (m:Movie)
+SET m.countries = split(coalesce(m.countries,""), "|"),
+m.languages = split(coalesce(m.languages,""), "|"),
+m.genres = split(coalesce(m.genres,""), "|")
+
+//To view the types stored in graph after refactoring
+CALL apoc.meta.nodeTypeProperties()
+YIELD nodeType, propertyName, propertyTypes
+
+//2. Adding additional labels to a node
+//Adding Actor label
+MATCH (p:Person)-[:ACTED_IN]->()
+WITH DISTINCT p SET p:Actor
+
+//Adding Director label
+match (p:Person)-[:DIRECTED]-() with distinct p set p:Director
+
+//check the added labels in the graph
+CALL apoc.meta.nodeTypeProperties()
+YIELD nodeType, propertyName, propertyTypes
+
+//3. Refactoring property as nodes
+//To view constraints in the graph
+Show constraints
+
+//View the final schema
+CALL db.schema.visualization
+
+//step1:creating uniqueness prperty for genre node
+CREATE CONSTRAINT Genre_name IF NOT EXISTS
+FOR (x:Genre)
+REQUIRE x.name IS UNIQUE
+
+//step2:Creating the Genre nodes from the genres property of Movie nodes
+MATCH (m:Movie)
+UNWIND m.genres AS genre
+WITH m, genre
+MERGE (g:Genre {name:genre})
+MERGE (m)-[:IN_GENRE]->(g)
+
+//step3:Also remove the genre property from movie node
+MATCH (m:Movie)
+SET m.genres = null
+
+//step4:View the final schema
+CALL db.schema.visualization
+
+//Importing large csv files using cypher
+//Step1:Delete all nodes and relationships in the graph
+MATCH (u:User) DETACH DELETE u;
+MATCH (p:Person) DETACH DELETE p;
+MATCH (m:Movie) DETACH DELETE m;
+MATCH (n) DETACH DELETE n
+
+//Step 2: Ensure all constraints exist in the graph
+SHOW CONSTRAINTS
+
+//sample code to create constraints
+CREATE CONSTRAINT Genre_name IF NOT EXISTS
+FOR (x:Genre)
+REQUIRE x.name IS UNIQUE
+
+//Step 3: Import Movie and Genre data
+CALL {
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-movieData.csv'
+AS row
+//process only Movie rows
+WITH row WHERE row.Entity = "Movie"
+MERGE (m:Movie {movieId: toInteger(row.movieId)})
+ON CREATE SET
+m.tmdbId = toInteger(row.tmdbId),
+m.imdbId = toInteger(row.imdbId),
+m.imdbRating = toFloat(row.imdbRating),
+m.released = datetime(row.released),
+m.title = row.title,
+m.year = toInteger(row.year),
+m.poster = row.poster,
+m.runtime = toInteger(row.runtime),
+m.countries = split(coalesce(row.countries,""), "|"),
+m.imdbVotes = toInteger(row.imdbVotes),
+m.revenue = toInteger(row.revenue),
+m.plot = row.plot,
+m.url = row.url,
+m.budget = toInteger(row.budget),
+m.languages = split(coalesce(row.languages,""), "|")
+WITH m,split(coalesce(row.genres,""), "|") AS genres
+UNWIND genres AS genre
+WITH m, genre
+MERGE (g:Genre {name:genre})
+MERGE (m)-[:IN_GENRE]->(g)
+}
+
+//Step 4: Import Person data
+CALL {
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-movieData.csv'
+AS row
+WITH row WHERE row.Entity = "Person"
+MERGE (p:Person {tmdbId: toInteger(row.tmdbId)})
+ON CREATE SET
+p.imdbId = toInteger(row.imdbId),
+p.bornIn = row.bornIn,
+p.name = row.name,
+p.bio = row.bio,
+p.poster = row.poster,
+p.url = row.url,
+p.born = CASE row.born WHEN "" THEN null ELSE date(row.born) END,
+p.died = CASE row.died WHEN "" THEN null ELSE date(row.died) END
+}
+
+//Step 5: Import the ACTED_IN relationships
+CALL {
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-movieData.csv'
+AS row
+WITH row WHERE row.Entity = "Join" AND row.Work = "Acting"
+MATCH (p:Person {tmdbId: toInteger(row.tmdbId)})
+MATCH (m:Movie {movieId: toInteger(row.movieId)})
+MERGE (p)-[r:ACTED_IN]->(m)
+ON CREATE
+SET r.role = row.role
+SET p:Actor
+}
+
+//Step 6: Import the DIRECTED relationships
+CALL {
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-movieData.csv'
+AS row
+WITH row WHERE row.Entity = "Join" AND row.Work = "Directing"
+MATCH (p:Person {tmdbId: toInteger(row.tmdbId)})
+MATCH (m:Movie {movieId: toInteger(row.movieId)})
+MERGE (p)-[r:DIRECTED]->(m)
+ON CREATE
+SET r.role = row.role
+SET p:Director
+}
+
+//Step 7: Import the User data
+CALL {
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-ratingData.csv'
+AS row
+MATCH (m:Movie {movieId: toInteger(row.movieId)})
+MERGE (u:User {userId: toInteger(row.userId)})
+ON CREATE SET u.name = row.name
+MERGE (u)-[r:RATED]->(m)
+ON CREATE SET r.rating = toInteger(row.rating),
+r.timestamp = toInteger(row.timestamp)
+}
+
+//HINT
+//After every import , always check the data that is read using return statements
+LOAD CSV WITH HEADERS
+FROM 'https://data.neo4j.com/importing/2-ratingData.csv'
+AS row
+RETURN
+toInteger(row.movieId),
+toInteger(row.userId),
+row.name,
+toInteger(row.rating),
+toInteger(row.timestamp)
+LIMIT 100
+
